@@ -17,82 +17,40 @@ const ai = new GoogleGenAI({
     apiKey : process.env.GEMINI_API_KEY
 });
 
-// const SYSTEM_PROMPT =`You turn a list of ingredients into one recipe.
-// Respond with ONLY valid JSON. No markdown fences, no prose before or after.
 
-// Match this exact shape:
-// {
-//   "title": string,
-//   "servings": number,
-//   "ingredients": [
-//     {
-//       "id": string,
-//       "name": string,
-//       "amount": number,
-//       "unit": string,
-//       "swap": string
-//     }
-//   ],
-//   "steps": [
-//     {
-//       "id": string,
-//       "text": string
-//     }
-//   ]
-// }
+const SYSTEM_PROMPT =`You turn a list of ingredients into one recipe.
+Respond with ONLY valid JSON. No markdown fences, no prose before or after.
 
-// Rules:
-// - "amount" must be a plain number (no fractions, no ranges).
-// - "unit" can be an empty string for countable items.
-// - "swap" should be a short substitute or "".
-// - Use 3-8 ingredients.
-// - Use 3-8 steps.
-// - ids should be like i1, i2 and s1, s2.
-// `;
+Match this exact shape:
+{
+  "title": string,
+  "servings": number,
+  "ingredients": [
+    {
+      "id": string,
+      "name": string,
+      "amount": number,
+      "unit": string,
+      "swap": string
+    }
+  ],
+  "steps": [
+    {
+      "id": string,
+      "text": string
+    }
+  ]
+}
 
-const SYSTEM_PROMPT = `You are a professional chef. You turn a list of ingredients into exactly one recipe.
 Rules:
 - "amount" must be a plain number (no fractions, no ranges).
 - "unit" can be an empty string for countable items.
 - "swap" should be a short substitute or "".
 - Use 3-8 ingredients.
 - Use 3-8 steps.
-- ids should be like i1, i2 and s1, s2.`;
+- ids should be like i1, i2 and s1, s2.
+`;
 
-// Define the exact JSON schema Gemini must return
-const recipeSchema = {
-   type: "object",
-    properties: {
-        title: { type: "string" },
-        servings: { type: "integer" },
-        ingredients: {
-            type: "array",
-            items: {
-                type: "object",
-                properties: {
-                    id: { type: "string" },
-                    name: { type: "string" },
-                    amount: { type: "number" },
-                    unit: { type: "string" },
-                    swap: { type: "string" }
-                },
-                required: ["id", "name", "amount", "unit", "swap"]
-            }
-        },
-        steps: {
-            type: "array",
-            items: {
-                type: "object",
-                properties: {
-                    id: { type: "string" },
-                    text: { type: "string" }
-                },
-                required: ["id", "text"]
-            }
-        }
-    },
-    required: ["title", "servings", "ingredients", "steps"]
-};
 app.post("/api/generate-recipe", async (req,res) =>{
     const {ingredients} = req.body;
 
@@ -108,52 +66,69 @@ app.post("/api/generate-recipe", async (req,res) =>{
                 {error : "Server is not missing for the API_KEY"}
             );
         }
-        try{
+  try {
 
-        //     const prompt = `
-        //      ${SYSTEM_PROMPT}
+    const prompt = `
+${SYSTEM_PROMPT}
 
-            
-        //      Ingredients:
-        //      ${ingredients}
-        //     `;
-        // const response = await ai.models.generateContent({
-        //     model: "gemini-2.0-flash",
-        //     contents: prompt,
-        // });
-        // console.log(prompt);
-        // let rawText = response.text;
-        // rawText = rawText.trim();
+Ingredients:
+${ingredients}
+`;
 
-        // return res.json({
-        //     rawText
-        // });
+    
+    const response = await ai.models.generateContent({
+      model: "gemini-flash-latest",
+      contents: prompt,
+    });
 
-        const response = await ai.models.generateContent({
-            // 1. Updated to the active Gemini 2.5 Flash model
-            model: "gemini-3.5-flash", 
-            contents: `Ingredients available:\n${ingredients}`,
-            config: {
-                systemInstruction: SYSTEM_PROMPT,
-               
-                responseMimeType: "application/json",
-                responseSchema: recipeSchema,
-            }
-        });
 
-        const recipeJson = JSON.parse(response.text);
-        console.log(recipeJson);
-        return res.json(recipeJson);
-    }catch(err){
-        console.log(err);
+    let rawText = response.text;
 
-        return res.status(500).json({
-            error : "Unexpected server error",
-        })
+
+    rawText = rawText.trim();
+
+
+    let cleaned = rawText.trim();
+
+if (cleaned.startsWith("```json")) {
+    cleaned = cleaned.replace("```json", "");
+}
+
+if (cleaned.startsWith("```")) {
+    cleaned = cleaned.replace("```", "");
+}
+
+if (cleaned.endsWith("```")) {
+    cleaned = cleaned.replace("```", "");
+}
+
+cleaned = cleaned.trim();
+
+    let recipe;
+
+    try {
+      recipe = JSON.parse(cleaned);
+    } catch (parseErr) {
+      console.error("Failed to parse model response:", rawText);
+
+      return res.status(502).json({
+        error: "Model returned malformed JSON.",
+      });
     }
+    return res.json({
+      recipe,
+    });
 
-      
- });
+
+  } catch (err) {
+    console.error("Gemini Error:", err);
+
+    return res.status(500).json({
+      error: "Unexpected server error.",
+    });
+  }
+});
+
  
 app.listen(PORT,() => {
     console.log(`Server running on http://localhost:${PORT}`);
