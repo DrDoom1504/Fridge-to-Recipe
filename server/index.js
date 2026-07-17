@@ -49,6 +49,8 @@ Rules:
 - Use 3-8 ingredients.
 - Use 3-8 steps.
 - ids should be like i1, i2 and s1, s2.
+- If the input does not contain any recognizable food ingredients, respond
+  with exactly this JSON instead: { "error": "No valid ingredients detected." }
 `;
 
 app.post("/api/generate-recipe", async (req,res) =>{
@@ -108,6 +110,9 @@ cleaned = cleaned.trim();
 
     try {
       recipe = JSON.parse(cleaned);
+      if(recipe.error){
+        return res.status(422).json({ error : recipe.error});
+      }
     } catch (parseErr) {
       console.error("Failed to parse model response:", rawText);
 
