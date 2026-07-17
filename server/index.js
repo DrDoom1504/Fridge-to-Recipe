@@ -63,7 +63,7 @@ app.post("/api/generate-recipe", async (req,res) =>{
         }
         if(!API_KEY){
             return res.status(500).json(
-                {error : "Server is not missing for the API_KEY"}
+                {error : "Server is missing the API_KEY"}
             );
         }
   try {
